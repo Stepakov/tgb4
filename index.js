@@ -1,9 +1,24 @@
 import Telegram from 'node-telegram-bot-api'
+import sequelize from './db.js'
+import User from './UserModel.js'
+
+
+
+
 
 const token = '7942830640:AAGmV76U9xjSLdzc8tMwooqABy9lbSdI-e4'
 
+
 const bot = new Telegram( token, { polling: true } )
 const chats = []
+
+try {
+    await sequelize.authenticate();
+    await sequelize.sync() // синхронизириуем модели с таблицами в БД
+    console.log('Connection has been established successfully.');
+} catch (error) {
+    console.error('Unable to connect to the database:', error);
+}
 
 bot.setMyCommands([
     { command: '/start', description: "Greetings" },
@@ -28,13 +43,20 @@ bot.on( 'message', async msg => {
 
     if( text === '/start' )
     {
+        const user = await User.findOrCreate({
+            where: { chatId: chatId.toString() }
+        });
         await bot.sendSticker( chatId, 'https://ih1.redbubble.net/image.441582952.6843/st,small,507x507-pad,600x600,f8f8f8.u3.jpg' )
         await bot.sendMessage( chatId, "Greetings" )
         return
     }
     if( text === '/info' )
     {
-        await bot.sendMessage( chatId, `You are ${msg.chat.first_name} ${msg.chat.last_name}`)
+        console.log( typeof chatId )
+        const user = await User.findOne({ chatId });
+        // console.log( user )
+        await bot.sendMessage( chatId, `You are ${msg.chat.first_name} ${msg.chat.last_name}. 
+        Lost: ${user.wrongAnswer}. Won: ${user.rightAnswer}`)
         return
     }
     if( text === '/game' )
@@ -55,12 +77,18 @@ bot.on( 'callback_query', async msg => {
     const chatId = msg.message.chat.id
     const data = parseInt( msg.data, 10 )
     // console.log( typeof data )
+    const user = await User.findOne({ chatId });
 
     if( data === chats[ chatId ] )
     {
+
+        user.rightAnswer++
+        user.save()
         await bot.sendMessage( chatId, 'You are won' )
         return
     }
 
+    user.wrongAnswer++
+    user.save()
     await bot.sendMessage( chatId, 'You are lost' )
 })
